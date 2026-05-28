@@ -1,0 +1,88 @@
+# MASVEL AI PRO — Deployment Guide
+
+## ⚠️ CRITICAL FIRST STEP
+Your HF token was shared in chat. **Revoke it immediately:**
+→ https://huggingface.co/settings/tokens
+Generate a new one with **Inference API (read)** permission only.
+
+---
+
+## Project Structure
+
+```
+masvel-deploy/
+├── backend/
+│   ├── main.py              ← FastAPI app (deploy to Render)
+│   ├── requirements.txt     ← Python dependencies
+│   ├── render.yaml          ← Render config
+│   ├── .env.example         ← Template — copy to .env locally
+│   └── .gitignore           ← Keeps .env out of Git
+│
+└── frontend/
+    ├── index.html           ← Your full site (deploy to Netlify)
+    └── netlify.toml         ← Netlify headers config
+```
+
+---
+
+## Step 1 — Deploy Backend to Render
+
+1. Push `backend/` folder to a **new GitHub repo** (e.g. `masvel-backend`)
+2. Go to https://render.com → New → Web Service
+3. Connect your GitHub repo
+4. Set these values:
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - **Runtime:** Python 3
+5. Under **Environment → Environment Variables**, add:
+   - `HUGGINGFACE_TOKEN` = your new HF token
+   - `ALLOWED_ORIGINS` = `https://your-site.netlify.app`
+     (you'll fill this after Netlify deploy — use `*` temporarily)
+6. Deploy. Copy your Render URL (e.g. `https://masvel-ai-backend.onrender.com`)
+
+---
+
+## Step 2 — Update Frontend URL
+
+Open `frontend/index.html` and find this line (around line 2390):
+
+```js
+const MASVEL_BACKEND_URL = "https://YOUR_RENDER_APP.onrender.com/generate-masvel-image";
+```
+
+Replace `YOUR_RENDER_APP` with your actual Render service name.
+
+---
+
+## Step 3 — Deploy Frontend to Netlify
+
+1. Push `frontend/` folder to a **new GitHub repo** (e.g. `masvel-frontend`)
+2. Go to https://netlify.com → Add new site → Import from Git
+3. Set **Publish directory** to `.` (root)
+4. Deploy. Copy your Netlify URL (e.g. `https://masvelai.netlify.app`)
+5. Go back to Render → Environment Variables → Update `ALLOWED_ORIGINS` with your Netlify URL
+
+---
+
+## Step 4 — Local Testing (optional)
+
+```bash
+cd backend
+cp .env.example .env
+# Edit .env — add your real HUGGINGFACE_TOKEN
+pip install -r requirements.txt
+uvicorn main:app --reload
+# API now at http://localhost:8000
+# Test: curl -X POST http://localhost:8000/generate-masvel-image \
+#   -H "Content-Type: application/json" \
+#   -d '{"prompt":"a golden sunset over mountains"}'
+```
+
+---
+
+## Notes
+
+- **Cold start delay:** Render free tier sleeps after 15min. First request may take ~30s.
+- **Model warmup:** SDXL on HF free inference also has cold start. Error 503 = retrying is fine.
+- **Rate limit:** Backend limits each IP to 5 requests per 60 seconds.
+- **Token safety:** Never commit `.env`. Never paste the token in any file pushed to Git.
